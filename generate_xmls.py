@@ -10,7 +10,13 @@ FILE_KDVP = 'Doh-KDVP.xml'
 FILE_DIV = 'Doh-Div.xml'
 FILE_OBR = 'Doh-Obr.xml'
 TAX_YEAR = 2025
-MY_TAX_ID = "12345678"  # <--- REPLACE WITH YOUR REAL TAX ID
+def load_tax_id():
+    tax_file = os.path.join(os.path.dirname(__file__), 'DAVCNA')
+    try:
+        with open(tax_file, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        raise FileNotFoundError("Taxpayer ID file 'DAVCNA' not found.")
 # ---------------------
 
 NS_EDP = "http://edavki.durs.si/Documents/Schemas/EDP-Common-1.xsd"
@@ -22,7 +28,7 @@ NS_OBR = "http://edavki.durs.si/Documents/Schemas/Doh_Obr_2.xsd"
 def create_header(parent):
     header = ET.SubElement(parent, f"{{{NS_EDP}}}Header")
     taxpayer = ET.SubElement(header, f"{{{NS_EDP}}}taxpayer")
-    ET.SubElement(taxpayer, f"{{{NS_EDP}}}taxNumber").text = str(MY_TAX_ID)
+    ET.SubElement(taxpayer, f"{{{NS_EDP}}}taxNumber").text = load_tax_id()
     ET.SubElement(header, f"{{{NS_EDP}}}Workflow")
     return header
 
