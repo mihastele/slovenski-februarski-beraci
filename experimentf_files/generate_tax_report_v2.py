@@ -5,10 +5,10 @@ from collections import defaultdict
 import os
 
 # --- CONFIGURATION ---
-INPUT_FILE = 'master_data.csv'
-FILE_KDVP = 'Doh-KDVP.xml'
-FILE_DIV = 'Doh-Div.xml'
-FILE_OBR = 'Doh-Obr.xml'
+INPUT_FILE = '../master_data.csv'
+FILE_KDVP = '../Doh-KDVP.xml'
+FILE_DIV = '../Doh-Div.xml'
+FILE_OBR = '../Doh-Obr.xml'
 TAX_YEAR = 2025
 MY_TAX_ID = "12345678"  # <--- REPLACE WITH YOUR REAL TAX ID
 # ---------------------

@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 # --- CONFIGURATION ---
-T212_FILE = 'trading212.csv'
-REVOLUT_FILE = 'revolut.csv'
+T212_FILE = '../trading212.csv'
+REVOLUT_FILE = '../revolut.csv'
 IBKR_FILE = 'ibkr.csv'
-MASTER_FILE = 'master_data.csv'
+MASTER_FILE = '../master_data.csv'
 ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip"
 # ---------------------
 
