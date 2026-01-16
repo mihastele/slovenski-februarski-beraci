@@ -83,7 +83,14 @@ def find_isin_online(ticker):
 def clean_number(value):
     if pd.isna(value) or value == '': return 0.0
     if isinstance(value, (float, int)): return float(value)
-    clean = str(value).replace('$', '').replace('€', '').replace('£', '').replace(',', '').strip()
+    clean = str(value).strip()
+    # Remove currency prefixes (e.g., "USD 0.24", "EUR 45")
+    for prefix in ['USD', 'EUR', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD', 'NZD', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF']:
+        if clean.upper().startswith(prefix):
+            clean = clean[len(prefix):].strip()
+            break
+    # Remove currency symbols
+    clean = clean.replace('$', '').replace('€', '').replace('£', '').replace(',', '')
     clean = clean.replace('\xa0', '')  # Remove non-breaking spaces
     try:
         return float(clean)
@@ -114,9 +121,9 @@ def process_revolut(file_path, converter, audit_log, skipped_log):
         ticker = row.get('Ticker', '') or row.get('Symbol', '')
 
         trans_type = ''
-        if r_type in ['BUY', 'MARKET BUY']:
+        if r_type in ['BUY', 'MARKET BUY', 'BUY - MARKET']:
             trans_type = 'BUY'
-        elif r_type in ['SELL', 'MARKET SELL']:
+        elif r_type in ['SELL', 'MARKET SELL', 'SELL - MARKET']:
             trans_type = 'SELL'
         elif r_type in ['DIVIDEND', 'DIV']:
             trans_type = 'DIV'
