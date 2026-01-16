@@ -253,8 +253,13 @@ def main():
     # Note: We filter for rows where Ticker is NOT 'CASH' so we don't try to find ISINs for money.
     print("\n--- INTELLIGENT ISIN FILL ---")
     if not df.empty and 'ISIN' in df.columns:
-        # Fill Forward/Backward for STOCKS only
+        # Sort by date first to ensure proper propagation order
+        df.sort_values(by='Date', inplace=True)
+        
+        # Replace empty strings with NaN for proper ffill/bfill, then convert back
+        df['ISIN'] = df['ISIN'].replace('', np.nan)
         df['ISIN'] = df.groupby('Ticker')['ISIN'].transform(lambda x: x.ffill().bfill())
+        df['ISIN'] = df['ISIN'].fillna('')
 
         # Find Missing ISINs (Exclude CASH/Interest)
         missing_mask = (df['ISIN'] == '') & (df['Type'].isin(['BUY', 'SELL'])) & (df['Ticker'] != 'CASH')
