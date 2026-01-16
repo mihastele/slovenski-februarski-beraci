@@ -64,6 +64,7 @@ def generate_kdvp(transactions):
     ET.register_namespace('edp', NS_EDP)
     envelope = ET.Element(f"{{{NS_KDVP}}}Envelope")
     create_header(envelope)
+    ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
     body = ET.SubElement(envelope, f"{{{NS_KDVP}}}body")
     doh_kdvp = ET.SubElement(body, f"{{{NS_KDVP}}}Doh_KDVP")
@@ -123,6 +124,7 @@ def generate_div(transactions):
     ET.register_namespace('edp', NS_EDP)
     envelope = ET.Element(f"{{{NS_DIV}}}Envelope")
     create_header(envelope)
+    ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
     body = ET.SubElement(envelope, f"{{{NS_DIV}}}body")
     doh_div = ET.SubElement(body, f"{{{NS_DIV}}}Doh_Div")
@@ -154,6 +156,7 @@ def generate_obr(transactions):
     ET.register_namespace('edp', NS_EDP)
     envelope = ET.Element(f"{{{NS_OBR}}}Envelope")
     create_header(envelope)
+    ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
     body = ET.SubElement(envelope, f"{{{NS_OBR}}}body")
     doh_obr = ET.SubElement(body, f"{{{NS_OBR}}}Doh_Obr")
