@@ -6,6 +6,8 @@
     <city>Ljubljana</city>
     <postNumber>1000</postNumber>
     <postName>Ljubljana</postName>
-    <resident>true</resident>
-    <countryID>SI</countryID>
+    <email>janez.novak@furs.si</email>
+    <telephoneNumber>01 123 45 67</telephoneNumber>
+    <residentCountry>SI</residentCountry>
+    <isResident>true</isResident>
 </taxpayer>

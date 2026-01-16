@@ -36,10 +36,19 @@ def create_header(parent):
     user_taxpayer = load_taxpayer_data()
     
     # Copy children to the namespaced header
+    # Copy children to the namespaced header
+    # valid_header_tags = {'taxNumber', 'taxpayerType', 'name', 'address1', 'city', 'postNumber', 'postName', 'resident', 'countryID'}
+    # Actually based on user sample, 'resident' and 'countryID' were NOT in header. 
+    # User's header tags: taxNumber, taxpayerType, name, address1, city, postNumber, postName.
+    # We will be conservative and include only what's seen in valid EDAVKI headers usually.
+    # The common schema usually allows resident/countryID but maybe strictly for some forms?
+    # Let's stick to the sample provided:
+    allowed_tags = ['taxNumber', 'taxpayerType', 'name', 'address1', 'city', 'postNumber', 'postName']
+    
     for child in user_taxpayer:
-        # We assume tag names in taxpayer.xml match required EDP schema names (e.g. taxNumber, name, ...)
-        new_child = ET.SubElement(taxpayer_node, f"{{{NS_EDP}}}{child.tag}")
-        new_child.text = child.text
+        if child.tag in allowed_tags:
+            new_child = ET.SubElement(taxpayer_node, f"{{{NS_EDP}}}{child.tag}")
+            new_child.text = child.text
 
     ET.SubElement(header, f"{{{NS_EDP}}}Workflow")
     return header
@@ -120,33 +129,75 @@ def generate_kdvp(transactions):
 
 # --- 2. DIVIDENDS (Div) ---
 def generate_div(transactions):
-    ET.register_namespace('', NS_DIV)
+    NS_DIV_3 = "http://edavki.durs.si/Documents/Schemas/Doh_Div_3.xsd"
+    ET.register_namespace('', NS_DIV_3)
     ET.register_namespace('edp', NS_EDP)
-    envelope = ET.Element(f"{{{NS_DIV}}}Envelope")
+    
+    envelope = ET.Element(f"{{{NS_DIV_3}}}Envelope")
     create_header(envelope)
     ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
-    body = ET.SubElement(envelope, f"{{{NS_DIV}}}body")
-    doh_div = ET.SubElement(body, f"{{{NS_DIV}}}Doh_Div")
-    ET.SubElement(doh_div, f"{{{NS_DIV}}}Obdobje").text = str(TAX_YEAR)
+    # Body has no namespace prefix in the sample, implies default namespace (NS_DIV_3)
+    # But wait, previous error said "body" in "Doh_Div_2.xsd" (the specific NS).
+    # The sample shows <body>...</body>. If default ns is Doh_Div_3, then body is in Doh_Div_3.
+    body = ET.SubElement(envelope, f"{{{NS_DIV_3}}}body")
+    
+    # Metadata part
+    doh_div = ET.SubElement(body, f"{{{NS_DIV_3}}}Doh_Div")
+    ET.SubElement(doh_div, f"{{{NS_DIV_3}}}Period").text = str(TAX_YEAR)
+    
+    # Load taxpayer extradata for the body part
+    user_taxpayer = load_taxpayer_data()
+    # Map from taxpayer.xml tags to Doh_Div tags
+    # taxpayer.xml: email -> EmailAddress
+    # taxpayer.xml: telephoneNumber -> PhoneNumber
+    # taxpayer.xml: residentCountry -> ResidentCountry
+    # taxpayer.xml: isResident -> IsResident
+    
+    mapping = {
+        'email': 'EmailAddress',
+        'telephoneNumber': 'PhoneNumber',
+        'residentCountry': 'ResidentCountry',
+        'isResident': 'IsResident'
+    }
+    
+    for child in user_taxpayer:
+        if child.tag in mapping:
+            ET.SubElement(doh_div, f"{{{NS_DIV_3}}}{mapping[child.tag]}").text = child.text
 
     divs = [t for t in transactions if t['Type'] == 'DIV' and t['Date'].startswith(str(TAX_YEAR))]
     divs.sort(key=lambda x: x['Date'])
 
     for t in divs:
-        item = ET.SubElement(doh_div, f"{{{NS_DIV}}}Doh_Div_Item")
-        ET.SubElement(item, f"{{{NS_DIV}}}DatumIzplacila").text = t['Date']
-
+        # Payer info from transaction or default if missing? 
+        # The sample has PayerIdentificationNumber, Name, Address, Country.
+        # Our CSV data might not have all this. We'll do best effort or placeholders.
+        
+        div_node = ET.SubElement(body, f"{{{NS_DIV_3}}}Dividend")
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}Date").text = t['Date']
+        
+        # Payer ID is often not known for stocks, maybe empty or default?
+        # User sample uses 94-1081436 (HP) etc.
+        # We don't have this in master_data.csv usually.
+        # We will set a placeholder or skip if strict.
+        # user sample has strict fields.
+        
         isin = t['ISIN'] if t['ISIN'] else "UNKNOWN"
         country = isin[:2].upper() if len(isin) >= 2 else "US"
+        
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerIdentificationNumber").text = "00000000" # Placeholder
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerName").text = t['Name'] if t['Name'] else "Unknown"
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerAddress").text = "Unknown Address"
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerCountry").text = country
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}Type").text = "1" # 1 = Dividende
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}Value").text = format_decimal(t['TotalValueEUR'], 2)
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}ForeignTax").text = format_decimal(t['TaxPaidEUR'], 2)
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}SourceCountry").text = country
+        # ReliefStatement is mandatory if tax treaty claimed? Sample has it.
+        # We'll leave it empty or omit if not claiming treaty in this simplified script.
+        # Sample: <ReliefStatement>10/01, 2b odstavek 10. člena</ReliefStatement>
+        # ET.SubElement(div_node, f"{{{NS_DIV_3}}}ReliefStatement").text = "" 
 
-        ET.SubElement(item, f"{{{NS_DIV}}}Isin").text = isin
-        ET.SubElement(item, f"{{{NS_DIV}}}Naziv").text = t['Name']
-        ET.SubElement(item, f"{{{NS_DIV}}}Drzava").text = country
-        ET.SubElement(item, f"{{{NS_DIV}}}DrzavaVir").text = country
-        ET.SubElement(item, f"{{{NS_DIV}}}ZnesekDividende").text = format_decimal(t['TotalValueEUR'], 2)
-        ET.SubElement(item, f"{{{NS_DIV}}}TujDavek").text = format_decimal(t['TaxPaidEUR'], 2)
-        ET.SubElement(item, f"{{{NS_DIV}}}Valuta").text = "EUR"
     return envelope
 
 
