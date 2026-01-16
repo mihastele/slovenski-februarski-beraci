@@ -264,5 +264,146 @@ def main():
     print("=" * 30)
 
 
+# ... (Imports and Config remain the same) ...
+
+# ---------------------------------------------------------
+# NEW STRICT CLEANER
+# ---------------------------------------------------------
+def clean_isin(value):
+    """
+    Forces invalid values (NaN, float('nan'), None, 'nan') to be an empty string.
+    This prevents 'NaN' from being treated as a valid existing ISIN.
+    """
+    if value is None:
+        return ''
+
+    # Check for actual Pandas/Numpy NaN objects
+    if pd.isna(value):
+        return ''
+
+    s = str(value).strip()
+
+    # Check for string representations of nothing
+    if s.lower() in ['nan', 'none', '', '-']:
+        return ''
+
+    return s
+
+
+# ... (CurrencyConverter and clean_number remain the same) ...
+
+def find_isin_online(ticker):
+    print(f"  [WEB SEARCH] Looking up ISIN for: {ticker}...")
+    try:
+        t = yf.Ticker(ticker)
+        # yfinance sometimes returns '-' for empty ISINs, handle that
+        isin = t.isin
+        if isin and isin != '-' and len(isin) > 0:
+            print(f"    -> FOUND: {isin}")
+            return isin
+    except Exception as e:
+        print(f"    -> ERROR looking up {ticker}: {e}")
+
+    print(f"    -> FAILED (No data found)")
+    return ''
+
+
+# ... (Keep process_revolut, process_t212, process_ibkr SAME as before) ...
+# ... BUT ensure you use `clean_isin()` inside them like you did in the previous step ...
+# ... If you need me to paste those whole functions again, let me know.
+# ... The CRITICAL fix is in the main() logic below:
+
+def main():
+    converter = CurrencyConverter()
+    audit_log = []
+    skipped_log = []
+    all_rows = []
+
+    # 1. Process Files
+    # We apply clean_isin IMMEDIATELY inside these functions, or we fix it here after loading
+    print("Loading files...")
+    all_rows.extend(process_revolut(REVOLUT_FILE, converter, audit_log, skipped_log))
+    all_rows.extend(process_t212(T212_FILE, skipped_log))
+    all_rows.extend(process_ibkr(IBKR_FILE, converter, audit_log, skipped_log))
+
+    # --- SAFETY FIX: SANITIZE ALL ROWS FIRST ---
+    # This ensures no NaN objects survive to trick the logic
+    for r in all_rows:
+        r['ISIN'] = clean_isin(r.get('ISIN'))
+    # -------------------------------------------
+
+    # 2. ISIN Lookup
+    print("\nVerifying ISINs...")
+
+    # Build cache ONLY from rows that have a REAL string for ISIN
+    existing_isins = {}
+    for r in all_rows:
+        if r['ISIN']:  # Since we sanitized above, this is safe now (empty string is False)
+            existing_isins[r['Ticker']] = r['ISIN']
+
+    print(f"DEBUG: {len(existing_isins)} tickers already have valid ISINs in your files.")
+    print(existing_isins)
+
+    searched_tickers = set()
+
+    for r in all_rows:
+        # Only care about BUY/SELL
+        if r['Type'] not in ['BUY', 'SELL']:
+            continue
+
+        ticker = r['Ticker']
+
+        # If we already have a valid ISIN in this specific row, skip
+        if r['ISIN']:
+            continue
+
+        # If we know this ISIN from a different row/file, copy it
+        if ticker in existing_isins:
+            r['ISIN'] = existing_isins[ticker]
+            continue
+
+        # --- WEB SEARCH ---
+        # If we haven't searched this ticker yet this session
+        if ticker not in searched_tickers:
+            searched_tickers.add(ticker)
+
+            # Go online
+            found_isin = find_isin_online(ticker)
+
+            if found_isin:
+                # Update current row
+                r['ISIN'] = found_isin
+                # Add to cache so next rows for same stock get it instantly
+                existing_isins[ticker] = found_isin
+            else:
+                # LOG THE FAILURE
+                msg = f"ISIN NOT FOUND for {ticker}"
+                print(f"  [AUDIT WARNING] {msg}")
+                skipped_log.append({
+                    'Source': 'ISIN_CHECK',
+                    'Row': 'N/A',
+                    'Reason': msg,
+                    'RawData': f"Ticker: {ticker}"
+                })
+        else:
+            # We already searched this ticker and found nothing
+            # Just ensure we didn't miss a cache update
+            if ticker in existing_isins:
+                r['ISIN'] = existing_isins[ticker]
+
+    # 3. Save
+    all_rows.sort(key=lambda x: x['Date'])
+    keys = ['Source', 'Date', 'Type', 'Ticker', 'ISIN', 'Name', 'Quantity', 'TotalValueEUR', 'TaxPaidEUR']
+
+    pd.DataFrame(all_rows)[keys].to_csv(MASTER_FILE, index=False)
+    if audit_log: pd.DataFrame(audit_log).to_csv(AUDIT_FILE, index=False)
+    if skipped_log: pd.DataFrame(skipped_log).to_csv(SKIPPED_FILE, index=False)
+
+    print("\n" + "=" * 30)
+    print("DONE.")
+    print(f"Check {SKIPPED_FILE} for any tickers that failed web lookup.")
+    print("=" * 30)
+
+
 if __name__ == "__main__":
     main()
