@@ -55,11 +55,52 @@ def create_header(parent):
     return header
 
 
-def format_decimal(value, precision=2):
+# def format_decimal(value, precision=2):
+#     try:
+#         return f"{float(value):.{precision}f}"
+#     except:
+#         return f"{0:.{precision}f}"
+
+
+def format_decimal(value, precision=2, require_nonzero=False):
+    """
+    Returns a formatted decimal string or None.
+    If require_nonzero=True, returns None when the value would format to 0 at given precision.
+    """
     try:
-        return f"{float(value):.{precision}f}"
+        v = float(value)
     except:
-        return f"{0:.{precision}f}"
+        v = 0.0
+
+    rounded = round(v, precision)
+
+    if require_nonzero and rounded == 0:
+        return None
+
+    return f"{rounded:.{precision}f}"
+
+
+def add_decimal_el(parent, tag, value, precision=2, require_nonzero=False, omit_if_zero=False):
+    """
+    Creates subelement 'tag' with formatted decimal text.
+    - If omit_if_zero=True: does nothing when rounded value == 0.
+    - If require_nonzero=True: returns False when it would be zero (caller should skip the whole item).
+    Returns True if OK, False if caller should skip.
+    """
+    s = format_decimal(value, precision, require_nonzero=require_nonzero)
+    if s is None:
+        return False  # caller should skip the whole item
+
+    if omit_if_zero:
+        try:
+            if float(s) == 0.0:
+                return True
+        except:
+            pass
+
+    ET.SubElement(parent, tag).text = s
+    return True
+
 
 
 def prettify_xml(element):
@@ -111,6 +152,15 @@ def generate_kdvp(transactions):
         trades.sort(key=lambda x: x['Date'])
 
         for t in trades:
+
+            qty_ok = add_decimal_el(row, f"{{{NS_KDVP}}}Kolicina", t['Quantity'], precision=4)
+            val_ok = add_decimal_el(row, f"{{{NS_KDVP}}}NabavnaVrednost", t['TotalValueEUR'], precision=4)
+
+            if not (qty_ok and val_ok):
+                # Skip this BUY row entirely (or log it)
+                pridobitve.remove(row)  # or restructure to only create 'row' after checks
+                continue
+
             if t['Type'] == 'BUY':
                 row = ET.SubElement(pridobitve, f"{{{NS_KDVP}}}Pridobitev")
                 ET.SubElement(row, f"{{{NS_KDVP}}}DatumPridobitve").text = t['Date']
@@ -173,6 +223,11 @@ def generate_div(transactions):
         # Payer info from transaction or default if missing? 
         # The sample has PayerIdentificationNumber, Name, Address, Country.
         # Our CSV data might not have all this. We'll do best effort or placeholders.
+
+        value_str = format_decimal(t['TotalValueEUR'], 2)
+        if value_str is None:
+            # Too small -> would become 0.00, skip dividend item
+            continue
         
         div_node = ET.SubElement(body, f"{{{NS_DIV_3}}}Dividend")
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}Date").text = t['Date']
@@ -192,8 +247,10 @@ def generate_div(transactions):
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerCountry").text = country
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}Type").text = "1" # 1 = Dividende
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}Value").text = format_decimal(t['TotalValueEUR'], 2)
-        ET.SubElement(div_node, f"{{{NS_DIV_3}}}ForeignTax").text = format_decimal(t['TaxPaidEUR'], 2)
-        ET.SubElement(div_node, f"{{{NS_DIV_3}}}SourceCountry").text = country
+        tax_str = format_decimal(t['TaxPaidEUR'], 2)
+        if tax_str is not None and float(tax_str) != 0.0:
+            ET.SubElement(div_node, f"{{{NS_DIV_3}}}ForeignTax").text = tax_str
+            ET.SubElement(div_node, f"{{{NS_DIV_3}}}SourceCountry").text = country
         # ReliefStatement is mandatory if tax treaty claimed? Sample has it.
         # We'll leave it empty or omit if not claiming treaty in this simplified script.
         # Sample: <ReliefStatement>10/01, 2b odstavek 10. člena</ReliefStatement>
@@ -219,11 +276,15 @@ def generate_obr(transactions):
     items = [t for t in transactions if t['Type'] in ['INTEREST', 'LENDING'] and t['Date'].startswith(str(TAX_YEAR))]
 
     for t in items:
+        znesek_str = format_decimal(t['TotalValueEUR'], 2)
+        if znesek_str is None:
+            continue  # skip interest item that would be 0.00
         # Default Logic:
         # Revolut = Code 1 (Bank, 1000eur limit)
         # T212/IBKR = Code 3 (Other/Broker, Full tax)
         code = '1' if t['Source'] == 'Revolut' else '3'
         country = 'LT' if t['Source'] == 'Revolut' else 'GB'
+        tuj_str = format_decimal(t['TaxPaidEUR'], 2)
 
         row = ET.SubElement(obresti, f"{{{NS_OBR}}}ObrestiItem")
         ET.SubElement(row, f"{{{NS_OBR}}}DatumPrejetja").text = t['Date']
@@ -232,7 +293,8 @@ def generate_obr(transactions):
         ET.SubElement(row, f"{{{NS_OBR}}}Znesek").text = format_decimal(t['TotalValueEUR'], 2)
         ET.SubElement(row, f"{{{NS_OBR}}}Drzava").text = country
         ET.SubElement(row, f"{{{NS_OBR}}}TujDavek").text = format_decimal(t['TaxPaidEUR'], 2)
-        if float(t['TaxPaidEUR']) > 0:
+        if tuj_str is not None and float(tuj_str) != 0.0:
+            ET.SubElement(row, f"{{{NS_OBR}}}TujDavek").text = tuj_str
             ET.SubElement(row, f"{{{NS_OBR}}}DrzavaVir").text = country
 
     return envelope
