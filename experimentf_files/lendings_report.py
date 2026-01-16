@@ -6,9 +6,9 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONFIGURATION ---
-T212_FILE = 'trading212.csv'
-REVOLUT_FILE = 'revolut.csv'
-OUTPUT_FILE = 'Doh-Obr.xml'
+T212_FILE = '../trading212.csv'
+REVOLUT_FILE = '../revolut.csv'
+OUTPUT_FILE = '../Doh-Obr.xml'
 TAX_YEAR = 2025
 
 

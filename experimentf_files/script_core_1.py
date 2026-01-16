@@ -5,9 +5,9 @@ from collections import defaultdict
 import os
 
 # --- CONFIGURATION ---
-INPUT_FILE = 'master_data.csv'
-FILE_KDVP = 'Doh-KDVP.xml'
-FILE_DIV = 'Doh-Div.xml'
+INPUT_FILE = '../master_data.csv'
+FILE_KDVP = '../Doh-KDVP.xml'
+FILE_DIV = '../Doh-Div.xml'
 TAX_YEAR = 2025  # The year you are reporting for
 
 

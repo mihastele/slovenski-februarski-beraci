@@ -8,11 +8,11 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 # --- CONFIGURATION ---
-T212_FILE = 'trading212.csv'
-REVOLUT_FILE = 'revolut.csv'
-MASTER_FILE = 'master_data.csv'
-AUDIT_FILE = 'conversion_audit.csv'  # Proof of currency rates
-SKIPPED_FILE = 'skipped_rows.csv'  # Proof of what was ignored
+T212_FILE = '../trading212.csv'
+REVOLUT_FILE = '../revolut.csv'
+MASTER_FILE = '../master_data.csv'
+AUDIT_FILE = '../conversion_audit.csv'  # Proof of currency rates
+SKIPPED_FILE = '../skipped_rows.csv'  # Proof of what was ignored
 ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip"
 
 

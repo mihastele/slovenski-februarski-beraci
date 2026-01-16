@@ -4,9 +4,9 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 # Rename your downloaded files to match these, or change these names:
-T212_FILE = 'trading212.csv'
-REVOLUT_FILE = 'revolut.csv'
-OUTPUT_FILE = 'master_data.csv'
+T212_FILE = '../trading212.csv'
+REVOLUT_FILE = '../revolut.csv'
+OUTPUT_FILE = '../master_data.csv'
 
 
 # ---------------------
