@@ -22,10 +22,13 @@ ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip"
 # If yfinance cannot find it, add it here.
 # Example: 'HPQ': 'US40434L1052'
 MANUAL_ISIN_MAP = {
-    # 'HPQ': 'US40434L1052',  # HP Inc often fails on auto-lookup
-    # 'O': 'US7561091049',  # Realty Income
+    'O': 'US7561091049',  # Realty Income
+    'AGNC': 'US00123Q1040',   # AGNC Investment Corp
+    'AEO': 'US02553E1064',    # American Eagle Outfitters
+    'TRU': 'US89400J1079',    # TransUnion
+    'MOS': 'US61945C1036',    # The Mosaic Company
+    'ABBNY': 'US0003752047',  # ABB Ltd (ADR)
 }
-
 
 # ---------------------
 
