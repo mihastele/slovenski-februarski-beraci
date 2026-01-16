@@ -46,7 +46,22 @@ class CurrencyConverter:
             self.rates = df.to_dict(orient='index')
             print(f"  -> Success! Loaded rates for {len(self.rates)} days.")
         except Exception as e:
-            print(f"  [CRITICAL ERROR] Could not load ECB rates: {e}")
+            print(f"  [WARNING] Could not download ECB rates: {e}")
+            # Fallback: Try local file
+            if os.path.exists('eurofxref-hist.csv'):
+                print("  -> Found local 'eurofxref-hist.csv'. Loading...")
+                try:
+                    df = pd.read_csv('eurofxref-hist.csv')
+                    df.columns = df.columns.str.strip()
+                    df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
+                    df = df.set_index('Date')
+                    self.rates = df.to_dict(orient='index')
+                    print(f"  -> Success! Loaded local rates for {len(self.rates)} days.")
+                    return
+                except Exception as local_e:
+                    print(f"  [ERROR] Could not load local CSV: {local_e}")
+            
+            print("  [CRITICAL] Proceeding without official exchange rates.")
             self.rates = {}
 
     def get_rate(self, date_str, currency):
@@ -160,7 +175,13 @@ def process_revolut(file_path, converter, audit_log, skipped_log):
                     {'Date': date_str, 'Source': 'Revolut', 'Ticker': ticker, 'OrigAmount': amount, 'Curr': currency,
                      'RateUsed': raw_ecb, 'FinalEUR': final_eur})
             else:
-                print(f"  [WARNING] No ECB rate for {currency} on {date_str}")
+                # FALLBACK: Use 'FX Rate' from CSV if available
+                csv_fx = clean_number(row.get('FX Rate'))
+                if csv_fx > 0:
+                    final_eur = amount * (1 / csv_fx) # Assuming FX Rate is e.g. 1.05 USD/EUR
+                    print(f"  [INFO] Using CSV FX Rate {csv_fx} for {ticker} on {date_str} -> {final_eur:.2f} EUR")
+                else:
+                    print(f"  [WARNING] No ECB rate AND no CSV FX rate for {currency} on {date_str}")
 
         rows.append({
             'Source': 'Revolut', 'Date': date_str, 'Type': trans_type,
