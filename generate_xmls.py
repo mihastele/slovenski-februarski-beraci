@@ -10,13 +10,6 @@ FILE_KDVP = 'Doh-KDVP.xml'
 FILE_DIV = 'Doh-Div.xml'
 FILE_OBR = 'Doh-Obr.xml'
 TAX_YEAR = 2025
-def load_tax_id():
-    tax_file = os.path.join(os.path.dirname(__file__), 'DAVCNA')
-    try:
-        with open(tax_file, 'r', encoding='utf-8') as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        raise FileNotFoundError("Taxpayer ID file 'DAVCNA' not found.")
 # ---------------------
 
 NS_EDP = "http://edavki.durs.si/Documents/Schemas/EDP-Common-1.xsd"
@@ -25,10 +18,29 @@ NS_DIV = "http://edavki.durs.si/Documents/Schemas/Doh_Div_2.xsd"
 NS_OBR = "http://edavki.durs.si/Documents/Schemas/Doh_Obr_2.xsd"
 
 
+def load_taxpayer_data():
+    xml_file = os.path.join(os.path.dirname(__file__), 'taxpayer.xml')
+    if not os.path.exists(xml_file):
+        raise FileNotFoundError("Config file 'taxpayer.xml' not found. Please copy 'taxpayer.example.xml' to 'taxpayer.xml' and fill it.")
+    try:
+        tree = ET.parse(xml_file)
+        return tree.getroot()
+    except ET.ParseError:
+        raise ValueError("Invalid XML in 'taxpayer.xml'.")
+
 def create_header(parent):
     header = ET.SubElement(parent, f"{{{NS_EDP}}}Header")
-    taxpayer = ET.SubElement(header, f"{{{NS_EDP}}}taxpayer")
-    ET.SubElement(taxpayer, f"{{{NS_EDP}}}taxNumber").text = load_tax_id()
+    taxpayer_node = ET.SubElement(header, f"{{{NS_EDP}}}taxpayer")
+    
+    # Load data from local XML
+    user_taxpayer = load_taxpayer_data()
+    
+    # Copy children to the namespaced header
+    for child in user_taxpayer:
+        # We assume tag names in taxpayer.xml match required EDP schema names (e.g. taxNumber, name, ...)
+        new_child = ET.SubElement(taxpayer_node, f"{{{NS_EDP}}}{child.tag}")
+        new_child.text = child.text
+
     ET.SubElement(header, f"{{{NS_EDP}}}Workflow")
     return header
 
