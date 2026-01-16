@@ -50,7 +50,8 @@ def create_header(parent):
             new_child = ET.SubElement(taxpayer_node, f"{{{NS_EDP}}}{child.tag}")
             new_child.text = child.text
 
-    ET.SubElement(header, f"{{{NS_EDP}}}Workflow")
+    workflow = ET.SubElement(header, f"{{{NS_EDP}}}Workflow")
+    ET.SubElement(workflow, f"{{{NS_EDP}}}DocumentWorkflowID").text = "O"
     return header
 
 
