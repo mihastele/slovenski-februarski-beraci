@@ -66,7 +66,7 @@ def generate_kdvp(transactions):
     create_header(envelope)
     ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
-    body = ET.SubElement(envelope, f"{{{NS_EDP}}}body")
+    body = ET.SubElement(envelope, f"{{{NS_KDVP}}}body")
     doh_kdvp = ET.SubElement(body, f"{{{NS_KDVP}}}Doh_KDVP")
     kdvp = ET.SubElement(doh_kdvp, f"{{{NS_KDVP}}}KDVP")
 
@@ -126,7 +126,7 @@ def generate_div(transactions):
     create_header(envelope)
     ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
-    body = ET.SubElement(envelope, f"{{{NS_EDP}}}body")
+    body = ET.SubElement(envelope, f"{{{NS_DIV}}}body")
     doh_div = ET.SubElement(body, f"{{{NS_DIV}}}Doh_Div")
     ET.SubElement(doh_div, f"{{{NS_DIV}}}Obdobje").text = str(TAX_YEAR)
 
@@ -158,7 +158,7 @@ def generate_obr(transactions):
     create_header(envelope)
     ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
-    body = ET.SubElement(envelope, f"{{{NS_EDP}}}body")
+    body = ET.SubElement(envelope, f"{{{NS_OBR}}}body")
     doh_obr = ET.SubElement(body, f"{{{NS_OBR}}}Doh_Obr")
     ET.SubElement(doh_obr, f"{{{NS_OBR}}}Obdobje").text = str(TAX_YEAR)
 
