@@ -1,7 +1,9 @@
 data/
 .idea/
+.venv/
 trading212.csv
 revolut.csv
 master_data.csv
 Doh-KDVP.xml
 Doh-Div.xml
+/conversion_audit.csv
