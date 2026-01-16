@@ -15,7 +15,7 @@ IBKR_FILE = 'ibkr.csv'
 # Outputs
 MASTER_FILE = 'master_data.csv'
 AUDIT_FILE = 'audit_rates.csv'  # Proof of exchange rates
-SKIPPED_FILE = 'audit_skipped.csv'  # Report of ignored rows (Your Request)
+SKIPPED_FILE = 'audit_skipped.csv'  # Report of ignored rows OR Missing ISINs
 ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip"
 
 
@@ -57,7 +57,8 @@ def find_isin_online(ticker):
     print(f"  ... Searching online for ISIN: {ticker}")
     try:
         t = yf.Ticker(ticker)
-        if hasattr(t, 'isin') and t.isin and t.isin != '-':
+        # Check if isin exists and is not a placeholder
+        if hasattr(t, 'isin') and t.isin and t.isin != '-' and len(t.isin) > 0:
             return t.isin
     except:
         pass
@@ -187,10 +188,9 @@ def process_ibkr(file_path, converter, audit_log, skipped_log):
     rows = []
     if not os.path.exists(file_path): return rows
     print(f"Processing {file_path} (IBKR)...")
-    # Basic IBKR implementation (expand if needed)
     try:
-        df = pd.read_csv(file_path, skiprows=lambda x: x > 0 and 'Trades' not in str(x))  # Naive read
-        # ... (Add IBKR logic here if using it) ...
+        df = pd.read_csv(file_path, skiprows=lambda x: x > 0 and 'Trades' not in str(x))
+        # Add IBKR logic here if needed
     except:
         pass
     return rows
@@ -209,19 +209,43 @@ def main():
 
     # 2. ISIN Lookup (Only for Stocks)
     print("Verifying ISINs for Stocks...")
-    # Map existing ISINs first
+    # Map existing ISINs from files first
     existing_isins = {r['Ticker']: r['ISIN'] for r in all_rows if r['ISIN'] and r['Type'] in ['BUY', 'SELL']}
+
+    # Track which tickers we already searched online to avoid repeated web calls
+    searched_tickers = set()
 
     for r in all_rows:
         if r['Type'] in ['BUY', 'SELL'] and not r['ISIN']:
-            if r['Ticker'] in existing_isins:
-                r['ISIN'] = existing_isins[r['Ticker']]
+            ticker = r['Ticker']
+
+            if ticker in existing_isins:
+                # Use cached/known ISIN
+                r['ISIN'] = existing_isins[ticker]
+
             else:
-                # Go Online
-                found = find_isin_online(r['Ticker'])
-                if found:
-                    r['ISIN'] = found
-                    existing_isins[r['Ticker']] = found
+                # Not in cache, try web search (only once per ticker)
+                if ticker not in searched_tickers:
+                    searched_tickers.add(ticker)
+                    found = find_isin_online(ticker)
+
+                    if found:
+                        existing_isins[ticker] = found
+                        r['ISIN'] = found
+                    else:
+                        # --- NEW LOGIC: Log missing ISIN ---
+                        msg = f"ISIN NULL/Not Found for Ticker: {ticker}"
+                        print(f"  [WARNING] {msg}")
+                        skipped_log.append({
+                            'Source': 'ISIN_CHECK',
+                            'Row': 'N/A',
+                            'Reason': msg,
+                            'RawData': f"Ticker: {ticker}"
+                        })
+                else:
+                    # If we searched before and found nothing, it remains empty
+                    if ticker in existing_isins:
+                        r['ISIN'] = existing_isins[ticker]
 
     # 3. Save Files
     all_rows.sort(key=lambda x: x['Date'])
@@ -236,7 +260,7 @@ def main():
     print(f"DONE! Files Generated:")
     print(f"1. {MASTER_FILE} (Data for XML)")
     print(f"2. {AUDIT_FILE} (Currency Rates Used)")
-    print(f"3. {SKIPPED_FILE} (Rows Ignored - PLEASE CHECK THIS)")
+    print(f"3. {SKIPPED_FILE} (Errors & Missing ISINs - CHECK THIS)")
     print("=" * 30)
 
 
