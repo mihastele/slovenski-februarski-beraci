@@ -282,8 +282,8 @@ def main():
         df['ISIN'] = df.groupby('Ticker')['ISIN'].transform(lambda x: x.ffill().bfill())
         df['ISIN'] = df['ISIN'].fillna('')
 
-        # Find Missing ISINs (Exclude CASH/Interest)
-        missing_mask = (df['ISIN'] == '') & (df['Type'].isin(['BUY', 'SELL'])) & (df['Ticker'] != 'CASH')
+        # Find Missing ISINs (Exclude CASH/Interest) - also check DIV for dividend country detection
+        missing_mask = (df['ISIN'] == '') & (df['Type'].isin(['BUY', 'SELL', 'DIV'])) & (df['Ticker'] != 'CASH')
         missing_tickers = df.loc[missing_mask, 'Ticker'].unique()
 
         if len(missing_tickers) > 0:
@@ -300,19 +300,34 @@ def main():
                         'RawData': ticker
                     })
 
-    # 3. Save
+    # 3. Filter zero-value records
+    print("\n--- FILTERING ZERO-VALUE RECORDS ---")
     df.sort_values(by='Date', inplace=True)
-
-    # Ensure all Nulls are empty strings in final output for cleanliness
     df.fillna('', inplace=True)
 
+    # Separate rows with TotalValueEUR = 0
+    zero_mask = df['TotalValueEUR'].apply(lambda x: float(x) if x != '' else 0.0) == 0.0
+    zero_df = df[zero_mask].copy()
+    valid_df = df[~zero_mask].copy()
+
+    if len(zero_df) > 0:
+        print(f"  -> Skipping {len(zero_df)} records with TotalValueEUR = 0")
+        for idx, row in zero_df.iterrows():
+            skipped_log.append({
+                'Source': row.get('Source', ''),
+                'Row': idx,
+                'Reason': 'TotalValueEUR is 0',
+                'RawData': f"{row.get('Date')} | {row.get('Type')} | {row.get('Ticker')} | {row.get('Name')}"
+            })
+
+    # 4. Save
     keys = ['Source', 'Date', 'Type', 'Ticker', 'ISIN', 'Name', 'Quantity', 'TotalValueEUR', 'TaxPaidEUR']
-    df[keys].to_csv(MASTER_FILE, index=False)
+    valid_df[keys].to_csv(MASTER_FILE, index=False)
 
     if audit_log: pd.DataFrame(audit_log).to_csv(AUDIT_FILE, index=False)
     if skipped_log: pd.DataFrame(skipped_log).to_csv(SKIPPED_FILE, index=False)
 
-    print(f"\nDONE! Checked {len(df)} rows.")
+    print(f"\nDONE! Saved {len(valid_df)} rows to {MASTER_FILE}. Skipped {len(zero_df)} zero-value records.")
 
 
 if __name__ == "__main__":
