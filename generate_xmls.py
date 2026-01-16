@@ -247,9 +247,13 @@ def generate_div(transactions):
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerCountry").text = country
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}Type").text = "1" # 1 = Dividende
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}Value").text = format_decimal(t['TotalValueEUR'], 2)
-        tax_str = format_decimal(t['TaxPaidEUR'], 2)
-        if tax_str is not None and float(tax_str) != 0.0:
-            ET.SubElement(div_node, f"{{{NS_DIV_3}}}ForeignTax").text = tax_str
+        
+        # FURS requires SourceCountry and ForeignTax when payer country is not Slovenia
+        if country != "SI":
+            tax_str = format_decimal(t['TaxPaidEUR'], 2)
+            # ForeignTax is REQUIRED for foreign dividends - use 0.00 if no tax was withheld
+            ET.SubElement(div_node, f"{{{NS_DIV_3}}}ForeignTax").text = tax_str if tax_str else "0.00"
+            # SourceCountry is REQUIRED when other fields are filled
             ET.SubElement(div_node, f"{{{NS_DIV_3}}}SourceCountry").text = country
         # ReliefStatement is mandatory if tax treaty claimed? Sample has it.
         # We'll leave it empty or omit if not claiming treaty in this simplified script.
