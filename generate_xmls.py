@@ -308,14 +308,15 @@ def generate_obr(transactions):
     if 'residentCountry' in taxpayer_data:
         ET.SubElement(doh_obr, f"{{{NS_OBR}}}Country").text = taxpayer_data['residentCountry']
 
-    obresti = ET.SubElement(doh_obr, f"{{{NS_OBR}}}Interest")
-
+    # Get interest transactions for this year
     items = [t for t in transactions if t['Type'] in ['INTEREST', 'LENDING'] and t['Date'].startswith(str(TAX_YEAR))]
 
+    # Create individual Interest elements (not wrapped in container)
     for t in items:
         znesek_str = format_decimal(t['TotalValueEUR'], 2)
         if znesek_str is None:
             continue  # skip interest item that would be 0.00
+        
         # Default Logic:
         # Revolut = Code 1 (Bank, 1000eur limit)
         # T212/IBKR = Code 3 (Other/Broker, Full tax)
@@ -323,16 +324,22 @@ def generate_obr(transactions):
         country = 'LT' if t['Source'] == 'Revolut' else 'GB'
         tuj_str = format_decimal(t['TaxPaidEUR'], 2)
 
-        row = ET.SubElement(obresti, f"{{{NS_OBR}}}ObrestiItem")
-        ET.SubElement(row, f"{{{NS_OBR}}}DatumPrejetja").text = t['Date']
-        ET.SubElement(row, f"{{{NS_OBR}}}VrstaObresti").text = code
-        ET.SubElement(row, f"{{{NS_OBR}}}Opis").text = f"{t['Source']} Interest"
-        ET.SubElement(row, f"{{{NS_OBR}}}Znesek").text = format_decimal(t['TotalValueEUR'], 2)
-        ET.SubElement(row, f"{{{NS_OBR}}}Drzava").text = country
-        ET.SubElement(row, f"{{{NS_OBR}}}TujDavek").text = format_decimal(t['TaxPaidEUR'], 2)
+        # Each Interest is a direct child of Doh_Obr, not wrapped in container
+        interest = ET.SubElement(doh_obr, f"{{{NS_OBR}}}Interest")
+        
+        # Add child elements in XSD schema order with English names
+        ET.SubElement(interest, f"{{{NS_OBR}}}Date").text = t['Date']
+        # TaxNumber and IdentificationNumber are optional, skipping for foreign brokers
+        ET.SubElement(interest, f"{{{NS_OBR}}}Name").text = f"{t['Source']}"
+        ET.SubElement(interest, f"{{{NS_OBR}}}Address").text = "Unknown Address"  # Placeholder
+        ET.SubElement(interest, f"{{{NS_OBR}}}Country").text = country
+        ET.SubElement(interest, f"{{{NS_OBR}}}Type").text = code
+        ET.SubElement(interest, f"{{{NS_OBR}}}Value").text = format_decimal(t['TotalValueEUR'], 2)
+        
+        # Add ForeignTax and Country2 (source country) if non-zero
         if tuj_str is not None and float(tuj_str) != 0.0:
-            ET.SubElement(row, f"{{{NS_OBR}}}TujDavek").text = tuj_str
-            ET.SubElement(row, f"{{{NS_OBR}}}DrzavaVir").text = country
+            ET.SubElement(interest, f"{{{NS_OBR}}}ForeignTax").text = tuj_str
+            ET.SubElement(interest, f"{{{NS_OBR}}}Country2").text = country
 
     return envelope
 
