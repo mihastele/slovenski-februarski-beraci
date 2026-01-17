@@ -118,13 +118,22 @@ def generate_kdvp(transactions):
     ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
     body = ET.SubElement(envelope, f"{{{NS_KDVP}}}body")
+    ET.SubElement(body, f"{{{NS_EDP}}}bodyContent") # Required by schema
     doh_kdvp = ET.SubElement(body, f"{{{NS_KDVP}}}Doh_KDVP")
     kdvp = ET.SubElement(doh_kdvp, f"{{{NS_KDVP}}}KDVP")
 
-    doc_header = ET.SubElement(kdvp, f"{{{NS_KDVP}}}Dokument")
-    glava = ET.SubElement(doc_header, f"{{{NS_KDVP}}}Glava")
-    ET.SubElement(glava, f"{{{NS_KDVP}}}Obdobje").text = str(TAX_YEAR)
-    ET.SubElement(glava, f"{{{NS_KDVP}}}VrstaPoro").text = 'O'
+    doc_header = ET.SubElement(kdvp, f"{{{NS_KDVP}}}DocumentWorkflowID").text = "O" # Using DocumentWorkflowID as placeholder/required if 'O' was for 'Original'? No, 'O' was VrstaPoro. 
+    # Checking XSD again for KDVP:
+    # <xs:element name="Year" type="typeYear" minOccurs="0">
+    # <xs:element name="DocumentWorkflowID" ... minOccurs="0">
+    
+    # Original code had:
+    # <Dokument><Glava><Obdobje>2025</Obdobje><VrstaPoro>O</VrstaPoro></Glava></Dokument>
+    # This looks like old schema structure.
+    # New KDVP schema 9 has top level elements in KDVP.
+    
+    ET.SubElement(kdvp, f"{{{NS_KDVP}}}DocumentWorkflowID").text = "O" 
+    ET.SubElement(kdvp, f"{{{NS_KDVP}}}Year").text = str(TAX_YEAR)
 
     grouped = defaultdict(list)
     for t in transactions:
@@ -189,9 +198,8 @@ def generate_div(transactions):
     ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
     # Body has no namespace prefix in the sample, implies default namespace (NS_DIV_3)
-    # But wait, previous error said "body" in "Doh_Div_2.xsd" (the specific NS).
-    # The sample shows <body>...</body>. If default ns is Doh_Div_3, then body is in Doh_Div_3.
     body = ET.SubElement(envelope, f"{{{NS_DIV_3}}}body")
+    ET.SubElement(body, f"{{{NS_EDP}}}bodyContent") # Required by schema
     
     # Metadata part
     doh_div = ET.SubElement(body, f"{{{NS_DIV_3}}}Doh_Div")
@@ -224,37 +232,42 @@ def generate_div(transactions):
         # The sample has PayerIdentificationNumber, Name, Address, Country.
         # Our CSV data might not have all this. We'll do best effort or placeholders.
 
+        # VALIDATION 1: Value > 0
         value_str = format_decimal(t['TotalValueEUR'], 2)
-        if value_str is None:
-            # Too small -> would become 0.00, skip dividend item
+        if value_str is None or float(value_str) <= 0:
+            # Too small -> would become 0.00, skip dividend item. Or explicit 0.
             continue
         
-        div_node = ET.SubElement(body, f"{{{NS_DIV_3}}}Dividend")
+        div_node = ET.SubElement(doh_div, f"{{{NS_DIV_3}}}Dividend") # NOTE: Parent is Doh_Div, not body directly!
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}Date").text = t['Date']
         
-        # Payer ID is often not known for stocks, maybe empty or default?
-        # User sample uses 94-1081436 (HP) etc.
-        # We don't have this in master_data.csv usually.
-        # We will set a placeholder or skip if strict.
-        # user sample has strict fields.
-        
         isin = t['ISIN'] if t['ISIN'] else "UNKNOWN"
-        country = isin[:2].upper() if len(isin) >= 2 else "US"
+        # Extract country code from ISIN (first 2 chars) or default to US
+        country_code = isin[:2].upper() if len(isin) >= 2 and isin[:2].isalpha() else "US"
         
+        # VALIDATION 2: PayerCountry must be filled
+        payer_country = country_code # Simplification: Assume Payer Country = ISIN prefix
+        
+        # VALIDATION 3: SourceCountry must be filled if filled (mutually required generally)
+        source_country = payer_country
+
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerIdentificationNumber").text = "00000000" # Placeholder
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerName").text = t['Name'] if t['Name'] else "Unknown"
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerAddress").text = "Unknown Address"
-        ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerCountry").text = country
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}PayerCountry").text = payer_country
         ET.SubElement(div_node, f"{{{NS_DIV_3}}}Type").text = "1" # 1 = Dividende
-        ET.SubElement(div_node, f"{{{NS_DIV_3}}}Value").text = format_decimal(t['TotalValueEUR'], 2)
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}Value").text = value_str
 
         tax_str = format_decimal(t['TaxPaidEUR'], 2)
-        # FURS requires SourceCountry and ForeignTax when payer country is not Slovenia
-        if country != "SI" or tax_str is not None and float(tax_str) != 0.0:
-            # ForeignTax is REQUIRED for foreign dividends - use 0.00 if no tax was withheld
-            ET.SubElement(div_node, f"{{{NS_DIV_3}}}ForeignTax").text = tax_str if tax_str else "0.00"
-            # SourceCountry is REQUIRED when other fields are filled
-            ET.SubElement(div_node, f"{{{NS_DIV_3}}}SourceCountry").text = country
+        
+        # FURS Validation logic:
+        # If one field is filled, others might be required.
+        # Typically for foreign dividends: ForeignTax and SourceCountry are key.
+        
+        # Always fill ForeignTax (0.00 if empty) and SourceCountry for robustness
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}ForeignTax").text = tax_str if tax_str else "0.00"
+        ET.SubElement(div_node, f"{{{NS_DIV_3}}}SourceCountry").text = source_country
+        
         # ReliefStatement is mandatory if tax treaty claimed? Sample has it.
         # We'll leave it empty or omit if not claiming treaty in this simplified script.
         # Sample: <ReliefStatement>10/01, 2b odstavek 10. člena</ReliefStatement>
@@ -272,10 +285,30 @@ def generate_obr(transactions):
     ET.SubElement(envelope, f"{{{NS_EDP}}}Signatures")
 
     body = ET.SubElement(envelope, f"{{{NS_OBR}}}body")
+    ET.SubElement(body, f"{{{NS_EDP}}}bodyContent") # Required
     doh_obr = ET.SubElement(body, f"{{{NS_OBR}}}Doh_Obr")
-    ET.SubElement(doh_obr, f"{{{NS_OBR}}}Obdobje").text = str(TAX_YEAR)
+    ET.SubElement(doh_obr, f"{{{NS_OBR}}}Period").text = str(TAX_YEAR)
+    
+    # Add required metadata elements in correct order before Obresti
+    ET.SubElement(doh_obr, f"{{{NS_OBR}}}DocumentWorkflowID").text = "O"
+    
+    # Load taxpayer data for metadata fields
+    user_taxpayer = load_taxpayer_data()
+    
+    # Create a dictionary for easy lookup
+    taxpayer_data = {child.tag: child.text for child in user_taxpayer}
+    
+    # Add elements in the exact order required by XSD schema
+    if 'email' in taxpayer_data:
+        ET.SubElement(doh_obr, f"{{{NS_OBR}}}Email").text = taxpayer_data['email']
+    if 'telephoneNumber' in taxpayer_data:
+        ET.SubElement(doh_obr, f"{{{NS_OBR}}}TelephoneNumber").text = taxpayer_data['telephoneNumber']
+    if 'isResident' in taxpayer_data:
+        ET.SubElement(doh_obr, f"{{{NS_OBR}}}ResidentOfRepublicOfSlovenia").text = taxpayer_data['isResident']
+    if 'residentCountry' in taxpayer_data:
+        ET.SubElement(doh_obr, f"{{{NS_OBR}}}Country").text = taxpayer_data['residentCountry']
 
-    obresti = ET.SubElement(doh_obr, f"{{{NS_OBR}}}Obresti")
+    obresti = ET.SubElement(doh_obr, f"{{{NS_OBR}}}Interest")
 
     items = [t for t in transactions if t['Type'] in ['INTEREST', 'LENDING'] and t['Date'].startswith(str(TAX_YEAR))]
 
