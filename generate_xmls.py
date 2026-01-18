@@ -329,17 +329,23 @@ def generate_obr(transactions):
         
         # Add child elements in XSD schema order with English names
         ET.SubElement(interest, f"{{{NS_OBR}}}Date").text = t['Date']
-        # TaxNumber and IdentificationNumber are optional, skipping for foreign brokers
+        # TaxNumber is optional (for Slovenian entities), skip for foreign brokers
+        
+        # Add IdentificationNumber (registration number) for known brokers
+        if t['Source'] == 'T212':
+            ET.SubElement(interest, f"{{{NS_OBR}}}IdentificationNumber").text = "HE 409763"
+        # TODO: Add IDs for other brokers (Revolut, IBKR) as needed
+        
         ET.SubElement(interest, f"{{{NS_OBR}}}Name").text = f"{t['Source']}"
         ET.SubElement(interest, f"{{{NS_OBR}}}Address").text = "Unknown Address"  # Placeholder
         ET.SubElement(interest, f"{{{NS_OBR}}}Country").text = country
         ET.SubElement(interest, f"{{{NS_OBR}}}Type").text = code
         ET.SubElement(interest, f"{{{NS_OBR}}}Value").text = format_decimal(t['TotalValueEUR'], 2)
         
-        # Add ForeignTax and Country2 (source country) if non-zero
-        if tuj_str is not None and float(tuj_str) != 0.0:
-            ET.SubElement(interest, f"{{{NS_OBR}}}ForeignTax").text = tuj_str
-            ET.SubElement(interest, f"{{{NS_OBR}}}Country2").text = country
+        # FURS requires: if any field is filled, Country2 must be present
+        # Always add ForeignTax (even if 0.00) and Country2
+        ET.SubElement(interest, f"{{{NS_OBR}}}ForeignTax").text = format_decimal(t['TaxPaidEUR'], 2)
+        ET.SubElement(interest, f"{{{NS_OBR}}}Country2").text = country
 
     return envelope
 
